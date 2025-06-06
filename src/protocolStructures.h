@@ -3,10 +3,12 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#define SIZE 64
+
 typedef enum {
     MSG_DATA,
     MSG_ALERT
-} MessageType;
+} TYPE_PAYLOAD;
 
 #pragma pack(push, 1)
 typedef struct{
@@ -20,7 +22,15 @@ typedef struct{
 } AirplaneInfo;
 
 typedef struct {
-    char message[33];
+	char flightcode[7];
+	uint32_t timestamp;
+	uint8_t alertLevel;
+    char message[24];
 } AlertData;
+
+typedef struct{
+	TYPE_PAYLOAD type;
+	char payload[64]; //both payloads should be 64B long. will fix lengths
+} Package;
 
 #pragma pack(pop)
