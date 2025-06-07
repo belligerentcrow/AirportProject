@@ -46,7 +46,7 @@ void gestioneAerei(void *argv){
 
     inet_ntop(AF_INET, &info->address.sin_addr, plane_ip, INET_ADDRSTRLEN);
     int plane_port = ntohs(info->address.sin_port);
-    printf("New plane on radar. CODE: %s, PORT %d --- FROM: %s TO: %s. INITIAL LAT: %4.4f, INITIAL LONG:%4.4f\n", info->planeCode, info->address.sin_port, info->departure, info->arrival, info->latitude, info->longitude);
+    //printf("New plane on radar. CODE: %s, PORT %d --- FROM: %s TO: %s. INITIAL LAT: %4.4f, INITIAL LONG:%4.4f\n", info->planeCode, info->address.sin_port, info->departure, info->arrival, info->latitude, info->longitude);
 
     pthread_mutex_lock(&planeslist.mutex);
     planeslist.planes[planeslist.count++] = info;
@@ -77,6 +77,7 @@ void gestioneAerei(void *argv){
             break;
         }
 
+        //logica di smistamento pacchetti
         if(pack.type == MSG_DATA){
             AirplaneInfo packPlaneInfo;
             memcpy(&packPlaneInfo, pack.payload, sizeof(AirplaneInfo));
@@ -117,21 +118,18 @@ int create_server(uint16_t port){
         close(sockfd);
         exit_with_sys_err("Socket creation");
     }
-    printf("ok\n");
+
+    //cleanup and populate socket
     memset(&serverSockAddr, '\0', sizeof(serverSockAddr));
-    printf("one\n");
     serverSockAddr.sin_family = AF_INET;
-    printf("two\n");
     serverSockAddr.sin_port = htons(port);
-    printf("three\n");
     serverSockAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    printf("bind! It's a server\n");
+
     //bind! It's a server
     if(bind(sockfd, (struct sockaddr *) &serverSockAddr, sizeof(serverSockAddr))<0){
         exit_with_sys_err("bind failed");
     }
 
-    printf("Listen! It's a server\n");
     //listen! it's a server
     if(listen(sockfd, MAX_PLANES)<0){
         exit_with_sys_err("listen failed");
@@ -169,9 +167,9 @@ int main(int argc, char * argv[]){
             printf("Accept failed");
         }
 
-
-
-
+        pthread_t threadAirplane;
+        pthread_create(&threadAirplane, NULL, (void*)gestioneAerei, (void*)plane);
+        pthread_detach(threadAirplane);
     }
 
     printf("Chiusura server...\n");
