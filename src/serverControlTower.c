@@ -6,12 +6,17 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <pthread.h>
+#include <stdbool.h>
 #include "lib-misc.h"
 #include "protocolStructures.h"
+#include "coordinatesMethods.h"
 
 #define MAX_PLANES 20
 #define PORT 8080
 #define MAX_BUFFER 1024;
+#define TOWER_LATITUDE 55.95045 
+#define TOWER_LONGITUDE -3.36061
+#define MAX_RADIUS_FROM_TOWER 10000 //10km
 
 typedef struct{
     int sockfd;
@@ -23,10 +28,10 @@ typedef struct{
 	uint8_t altitude;
 	char departure[5];
 	char arrival[5];
-} plane_info;
+} tracked_plane;
 
 typedef struct {
-    plane_info *planes[MAX_PLANES];
+    tracked_plane *planes[MAX_PLANES];
     int count;
     pthread_mutex_t mutex;
 } planes_list;
@@ -34,9 +39,9 @@ typedef struct {
 planes_list planeslist = {.count=0};
 
 void gestioneAerei(void *argv){
-    plane_info * info = (plane_info*)argv;
+    tracked_plane * info = (tracked_plane*)argv;
     int plane_socket = info->sockfd;
-    char buffer[MAX_BUFFER];
+    Package pack;
     char plane_ip[INET_ADDRSTRLEN];
 
     inet_ntop(AF_INET, &info->address.sin_addr, plane_ip, INET_ADDRSTRLEN);
@@ -45,14 +50,12 @@ void gestioneAerei(void *argv){
 
     pthread_mutex_lock(&planeslist.mutex);
     planeslist.planes[planeslist.count++] = info;
-    pthread_mutex_unlock(&planes.mutex);
+    pthread_mutex_unlock(&planeslist.mutex);
 
     while(true){
-        struct PlaneData receivedPlaneData;
-        ssize_t bytes_received = recv(plane_socket, &receivedPlaneData, sizeof(struct PlaneData), 0);
+        //struct PlaneData receivedPlaneData;
+        ssize_t bytes_received = recv(plane_socket, &pack, sizeof(pack), 0);
         
-
-
         //gestire disconnessione
         if(bytes_received==0){
             printf("PLANE %s - %d OFF THE RADAR\n", plane_ip, info->address.sin_port);
@@ -63,8 +66,8 @@ void gestioneAerei(void *argv){
                 if(planeslist.planes[i]->sockfd == info->address.sin_port){
                     free(planeslist.planes[i]); // l'aereo vola via
                     //sistemo l'array con tutti gli altri
-                    for(int j = i; j < planes.count -1; j++){
-                        planeslist.planes[j] = planes.planes[j+1];
+                    for(int j = i; j < planeslist.count -1; j++){
+                        planeslist.planes[j] = planeslist.planes[j+1];
                     }
                     planeslist.count--;
                     break;
@@ -73,8 +76,25 @@ void gestioneAerei(void *argv){
             pthread_mutex_unlock(&planeslist.mutex); //fuori dalla sezione critica
             break;
         }
-        buffer[bytes_received] = '\0';
-        printf("[%s - PORT:%d] ", info->planeCode, info->address.sin_port, )
+
+        if(pack.type == MSG_DATA){
+            AirplaneInfo packPlaneInfo;
+            memcpy(&packPlaneInfo, pack.payload, sizeof(AirplaneInfo));
+            printf("[%s - %d] AT LAT: %4.6f, LONG: %4.6f, ALT: %u; FROM: %s TO: %s, STATE: %s\n", packPlaneInfo.flightcode, packPlaneInfo.timestamp, packPlaneInfo.latitude, packPlaneInfo.longitude, packPlaneInfo.altitude, packPlaneInfo.departure, packPlaneInfo.arrival, packPlaneInfo.message);
+
+        }else if(pack.type == MSG_ALERT){
+            AlertData packAlertData;
+        //}else if(pack.type == MSG_COORDINATES){
+        //    Coordinates packCoordinates;
+        //
+        //}else{
+            printf("ERROR Serv Receiving package");
+            break;
+        }
+
+
+        //buffer[bytes_received] = '\0';
+        //printf("[%s - PORT:%d] ", info->planeCode, info->address.sin_port, )
 
     }
     close(plane_socket);
@@ -88,6 +108,7 @@ void invioMessaggio(const char * message, int sender_fd, int receiver_fd){
 
 
 int create_server(uint16_t port){
+    printf("CreatingServer...\n");
     int sockfd;
     struct sockaddr_in serverSockAddr;
     socklen_t socklen = sizeof(serverSockAddr);
@@ -96,35 +117,41 @@ int create_server(uint16_t port){
         close(sockfd);
         exit_with_sys_err("Socket creation");
     }
+    printf("ok\n");
     memset(&serverSockAddr, '\0', sizeof(serverSockAddr));
+    printf("one\n");
     serverSockAddr.sin_family = AF_INET;
+    printf("two\n");
     serverSockAddr.sin_port = htons(port);
-    serverSockAddr.sin_addr.s_addr = inet_addr(INADDR_ANY);
-
+    printf("three\n");
+    serverSockAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    printf("bind! It's a server\n");
     //bind! It's a server
     if(bind(sockfd, (struct sockaddr *) &serverSockAddr, sizeof(serverSockAddr))<0){
         exit_with_sys_err("bind failed");
     }
 
+    printf("Listen! It's a server\n");
     //listen! it's a server
     if(listen(sockfd, MAX_PLANES)<0){
         exit_with_sys_err("listen failed");
     }
-
+    
     return sockfd;
 }
 
 int main(int argc, char * argv[]){
     
 
-    if((argc!=3) || (argv[1]<1024) || (strlen(argv[2]) !=4)){
+    if((argc!=3) || (atoi(argv[1])<1024) || (strlen(argv[2]) !=4)){
         printf("Usage: %s <PORT> <AIRPORT CODE (4 CHAR)>\n", argv[0]);
-        if(argv[1]<1024){
+        if(atoi(argv[1])<1024){
             printf("Non usare porte riservate. P > 1024\n");
         }
         exit_with_err("Usage Error",1);
     }
-    char airportCode[5] = argv[2];
+    char airportCode[5];
+    strcpy(airportCode, argv[2]);
 
     int serverSocketFD = create_server(atoi(argv[1]));
 
@@ -135,7 +162,7 @@ int main(int argc, char * argv[]){
     printf("Server in ascolto su %d\n",atoi(argv[1]));
 
     while(true){
-        plane_info * plane = malloc(sizeof(plane_info));
+        tracked_plane * plane = malloc(sizeof(tracked_plane));
         socklen_t socklenpl = sizeof(plane->address);
 
         if((plane->sockfd = accept(serverSocketFD, (struct sockaddr *)&plane->address, &socklenpl))<0){
@@ -148,7 +175,7 @@ int main(int argc, char * argv[]){
     }
 
     printf("Chiusura server...\n");
-    pthread_mutex_destroy(&controls.mutex);
+    pthread_mutex_destroy(&planeslist.mutex);
     close(serverSocketFD);
     exit(EXIT_SUCCESS);
 }
