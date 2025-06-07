@@ -5,12 +5,13 @@
 
 #define SIZE 64
 
+#pragma pack(push, 1)
 typedef enum {
     MSG_DATA,
-    MSG_ALERT
+    MSG_ALERT,
+	MSG_COORDINATES
 } TYPE_PAYLOAD;
 
-#pragma pack(push, 1)
 typedef struct{
 	char flightcode[7];
 	uint32_t timestamp;
