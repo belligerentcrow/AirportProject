@@ -85,10 +85,13 @@ void gestioneAerei(void *argv){
 
         }else if(pack.type == MSG_ALERT){
             AlertData packAlertData;
-        //}else if(pack.type == MSG_COORDINATES){
-        //    Coordinates packCoordinates;
-        //
-        //}else{
+        }
+        else if(pack.type == MSG_COORDINATES){
+            Coordinates packCoordinates;
+            memcpy(&packCoordinates, pack.payload, sizeof(Coordinates));
+            printf("[%s - %d] COORDINATES: %4.6f %4.6f %u -- MSG: %s\n", packCoordinates.planecode, packCoordinates.planetimestamp, packCoordinates.latitude, packCoordinates.longitude, packCoordinates.altitude, packCoordinates.message);
+        
+        }else{
             printf("ERROR Serv Receiving package");
             break;
         }
@@ -167,8 +170,9 @@ int main(int argc, char * argv[]){
             printf("Accept failed");
         }
 
-        pthread_t threadAirplane;
+        //pthread_t threadAirplane, threadReceive;
         pthread_create(&threadAirplane, NULL, (void*)gestioneAerei, (void*)plane);
+        //pthread_create(&threadReceive, NULL, (void *) )
         pthread_detach(threadAirplane);
     }
 
