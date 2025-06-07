@@ -1,5 +1,12 @@
 # Airport Project
-Work in progress. 
+
+* Both server and clients need to be compiled with the -lm linked library (due to the cos and sin functions)
+  * `gcc ./src/serverControlTower.c -lm -o ./server`
+  * `gcc ./src/clientPlane.c -lm -o ./clientPlane`
+* usage example for the server: `./serverTower 8080 ABCD`
+* usage example for the clients: `./clientPlane 127.0.0.1 8080 XYZRPG ROME LNDN`
+* most functionalities are a work in progress!
+
 ## The Plan
 * A thread checks positions of planes
 	* It has to figure out if two or more are within 500m of each other
