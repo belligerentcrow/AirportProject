@@ -1,16 +1,19 @@
 #include <time.h>
 #include <math.h>
 #include <stdint.h>
+#include <stdlib.h>
 #define M_PI  3.14159265358979323846
 #define TOWER_LATITUDE 55.95045 
 #define TOWER_LONGITUDE -3.36061
 
 #pragma pack(push, 1)
 typedef struct{
+    char planecode[7];
 	float latitude;
 	float longitude;
 	uint16_t altitude;
-	char message[54];
+    uint32_t planetimestamp;
+	char message[40];
 } Coordinates;
 #pragma pack(pop)
 
@@ -32,6 +35,7 @@ uint16_t generateAltitude(){
 }
 
 Coordinates generatePoint(){
+    srand(time(NULL));
     float randAngle = ((float)rand()/RAND_MAX)*2.0 * M_PI;
     int randRadius = generateRadius();
     uint16_t randAlt = generateAltitude();
@@ -44,4 +48,4 @@ Coordinates generatePoint(){
 
     Coordinates mycoor = {.latitude=randLat, .longitude=randLong,.altitude=randAlt,.message="AFIS TX COOR TO TWR"};
     return mycoor;
-} 
+}
