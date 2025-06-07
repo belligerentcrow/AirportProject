@@ -20,6 +20,7 @@ Work in progress.
 	* Must access latter plane data in a mutually exclusive way
 * **plane**: `thread sending` airplane data to the control tower
 * **plane**: `thread receiving` messages and commands from the ground
+* Easter egg...
 
 ### Later features, maybe
 * *Later*: might have the user select direction of plane movement
