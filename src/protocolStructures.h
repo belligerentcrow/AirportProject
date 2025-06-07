@@ -20,13 +20,14 @@ typedef struct{
 	uint16_t altitude;
 	char departure[5];
 	char arrival[5];
+	char message[32];
 } AirplaneInfo;
 
 typedef struct {
 	char flightcode[7];
 	uint32_t timestamp;
 	uint8_t alertLevel;
-    char message[24];
+    char message[48];
 } AlertData;
 
 typedef struct{
