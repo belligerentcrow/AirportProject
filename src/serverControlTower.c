@@ -38,6 +38,7 @@ typedef struct {
 
 planes_list planeslist = {.count=0};
 
+
 void gestioneAerei(void *argv){
     tracked_plane * info = (tracked_plane*)argv;
     int plane_socket = info->sockfd;
@@ -46,13 +47,15 @@ void gestioneAerei(void *argv){
 
     inet_ntop(AF_INET, &info->address.sin_addr, plane_ip, INET_ADDRSTRLEN);
     int plane_port = ntohs(info->address.sin_port);
-    //printf("New plane on radar. CODE: %s, PORT %d --- FROM: %s TO: %s. INITIAL LAT: %4.4f, INITIAL LONG:%4.4f\n", info->planeCode, info->address.sin_port, info->departure, info->arrival, info->latitude, info->longitude);
+    
 
+    //first contact with a plane
     pthread_mutex_lock(&planeslist.mutex);
     planeslist.planes[planeslist.count++] = info;
     pthread_mutex_unlock(&planeslist.mutex);
 
     while(true){
+
         //struct PlaneData receivedPlaneData;
         ssize_t bytes_received = recv(plane_socket, &pack, sizeof(pack), 0);
         
@@ -60,10 +63,9 @@ void gestioneAerei(void *argv){
         if(bytes_received==0){
             printf("PLANE %s - %d OFF THE RADAR\n", plane_ip, info->address.sin_port);
             pthread_mutex_lock(&planeslist.mutex); //sezione critica
-
             for(int i =0; i < planeslist.count; i++){
                 //rimuovo aereo dai tracked planes
-                if(planeslist.planes[i]->sockfd == info->address.sin_port){
+                if(planeslist.planes[i]->sockfd == info->sockfd){
                     free(planeslist.planes[i]); // l'aereo vola via
                     //sistemo l'array con tutti gli altri
                     for(int j = i; j < planeslist.count -1; j++){
@@ -76,40 +78,94 @@ void gestioneAerei(void *argv){
             pthread_mutex_unlock(&planeslist.mutex); //fuori dalla sezione critica
             break;
         }
-
         //logica di smistamento pacchetti
         if(pack.type == MSG_DATA){
+            printf("DATA UPDATE \n");
             AirplaneInfo packPlaneInfo;
             memcpy(&packPlaneInfo, pack.payload, sizeof(AirplaneInfo));
             printf("[%s - %d] AT LAT: %4.6f, LONG: %4.6f, ALT: %u; FROM: %s TO: %s, STATE: %s\n", packPlaneInfo.flightcode, packPlaneInfo.timestamp, packPlaneInfo.latitude, packPlaneInfo.longitude, packPlaneInfo.altitude, packPlaneInfo.departure, packPlaneInfo.arrival, packPlaneInfo.message);
 
+            //since MSG_DATA should be the first packet to arrive it should work
+            //the plane with the first data packet should also be the latter one in list
+            //otherwise, i need to figure out a better way to identify it
+            pthread_mutex_lock(&planeslist.mutex);
+            strcpy(planeslist.planes[planeslist.count-1]->planeCode, packPlaneInfo.flightcode);
+            planeslist.planes[planeslist.count-1]->latitude = packPlaneInfo.latitude;
+            planeslist.planes[planeslist.count-1]->longitude = packPlaneInfo.longitude;
+            planeslist.planes[planeslist.count-1]->altitude = packPlaneInfo.altitude;
+            planeslist.planes[planeslist.count-1]->timestamp = packPlaneInfo.timestamp;
+            strcpy(planeslist.planes[planeslist.count-1]->departure, packPlaneInfo.departure);
+            strcpy(planeslist.planes[planeslist.count-1]->arrival, packPlaneInfo.arrival);
+            pthread_mutex_unlock(&planeslist.mutex);   
+
         }else if(pack.type == MSG_ALERT){
             AlertData packAlertData;
-        }
-        else if(pack.type == MSG_COORDINATES){
+            memcpy(&packAlertData,pack.payload, sizeof(AlertData));
+            printf("URGENT MESSAGE ALERT LEVEL %d FROM %s - %d. MESSAGE: %s", packAlertData.alertLevel, packAlertData.flightcode, packAlertData.timestamp, packAlertData.message);
+
+        }else if(pack.type == MSG_COORDINATES){
             Coordinates packCoordinates;
             memcpy(&packCoordinates, pack.payload, sizeof(Coordinates));
             printf("[%s - %d] COORDINATES: %4.6f %4.6f %u -- MSG: %s\n", packCoordinates.planecode, packCoordinates.planetimestamp, packCoordinates.latitude, packCoordinates.longitude, packCoordinates.altitude, packCoordinates.message);
-        
+            //updating structures lockign with mutex to prevent race condition
+            pthread_mutex_lock(&planeslist.mutex);
+            for(int i =0; i<planeslist.count; i++){
+                if(strcmp(planeslist.planes[i]->planeCode, packCoordinates.planecode)==0){
+                    planeslist.planes[i]->latitude = packCoordinates.latitude;
+                    planeslist.planes[i]->longitude = packCoordinates.longitude;
+                    planeslist.planes[i]->altitude = packCoordinates.altitude;
+                    planeslist.planes[i]->timestamp = packCoordinates.planetimestamp;
+                }
+            }
+            pthread_mutex_unlock(&planeslist.mutex);
         }else{
             printf("ERROR Serv Receiving package");
             break;
         }
-
-
-        //buffer[bytes_received] = '\0';
-        //printf("[%s - PORT:%d] ", info->planeCode, info->address.sin_port, )
-
     }
     close(plane_socket);
 }
 
-void invioMessaggio(const char * message, int sender_fd, int receiver_fd){
+void checkDistances(){
+    while(true){
+        int tot =0;
+        //enter critical region - because the number of planes might change!
+        pthread_mutex_lock(&planeslist.mutex);
+        tot = planeslist.count;
+        //check each plane distances with the others in the list
 
+        for(int i =0; i<tot-1; i++){
+            Coordinates plane1 = {
+                .latitude = planeslist.planes[i]->latitude,
+                .longitude = planeslist.planes[i]->longitude
+            };
+            for(int j =i+1; j<tot; j++){
+                
+                Coordinates plane2 = {
+                .latitude = planeslist.planes[j]->latitude,
+                .longitude = planeslist.planes[j]->longitude
+                };
+
+                //if two are very close to each other
+                //printf("plane1: [%s] - %f %f -- plane2: [%s] - %f %f\n", planeslist.planes[i]->planeCode, planeslist.planes[i]->latitude, planeslist.planes[i]->longitude, planeslist.planes[j]->planeCode, planeslist.planes[j]->latitude, planeslist.planes[j]->longitude);
+                if((calcdistance((double)plane1.latitude, (double)plane1.longitude, (double)plane2.latitude, (double)plane2.longitude)) < 5.0){
+                    //then alert them!
+                    printf("ALERT!! %s and %s TOO CLOSE\n", planeslist.planes[i]->planeCode, planeslist.planes[j]->planeCode);
+                    Package p;
+                    AlertData tooClosePack;
+                    strcpy(tooClosePack.flightcode, "CTOWER");
+                    strcpy(tooClosePack.message, "ALERT - TOO CLOSE TO ANOTHER PLANE.");
+                    p.type = MSG_ALERT;
+                    memcpy(p.payload, &tooClosePack, sizeof(tooClosePack));
+                    send(planeslist.planes[i]->sockfd, &p, sizeof(p), 0);
+                    send(planeslist.planes[j]->sockfd, &p, sizeof(p), 0);
+                }
+            }
+        }
+        pthread_mutex_unlock(&planeslist.mutex);
+        sleep(3);
+    }
 }
-
-
-
 
 int create_server(uint16_t port){
     printf("CreatingServer...\n");
@@ -162,6 +218,9 @@ int main(int argc, char * argv[]){
     }
     printf("Server in ascolto su %d\n",atoi(argv[1]));
 
+    pthread_t threadAirplane, threadChecks;
+    pthread_create(&threadChecks, NULL, (void *)checkDistances, 0);
+
     while(true){
         tracked_plane * plane = malloc(sizeof(tracked_plane));
         socklen_t socklenpl = sizeof(plane->address);
@@ -170,13 +229,13 @@ int main(int argc, char * argv[]){
             printf("Accept failed");
         }
 
-        //pthread_t threadAirplane, threadReceive;
+        
         pthread_create(&threadAirplane, NULL, (void*)gestioneAerei, (void*)plane);
-        //pthread_create(&threadReceive, NULL, (void *) )
         pthread_detach(threadAirplane);
     }
 
     printf("Chiusura server...\n");
+    pthread_join(threadChecks, NULL);
     pthread_mutex_destroy(&planeslist.mutex);
     close(serverSocketFD);
     exit(EXIT_SUCCESS);
