@@ -68,6 +68,7 @@ AirplaneInfo initStructures(char * planecode, char * from, char * to){
 void threadRicezione(void * argv){
     Package packrecv;
     while(true){
+        printf("wauiting palckets\n");
         ssize_t bytesRecv = recv(socketfd, &packrecv, sizeof(packrecv), 0);
         if(bytesRecv == 0){
             exit_with_sys_err("Server Closed the Connection");
@@ -85,6 +86,7 @@ void threadRicezione(void * argv){
             }
         }
         fflush(stdout);
+        
     }
 }
 
@@ -161,13 +163,13 @@ int main(int argc, char * argv[]){
     printf("Connesso...\n");
 
     AirplaneInfo airplane = initStructures(argv[3], argv[4], argv[5]);
-    /*
+    
     Package p= {
         .type = MSG_DATA
     };
     memcpy(p.payload, &airplane, sizeof(airplane));
     send(socketfd, &p, sizeof(p), 0);
-    */
+    
 
     pthread_t threadPosition, threadSend, threadReceive;
     pthread_create(&threadPosition, NULL, (void*)threadChangePosition, NULL);
