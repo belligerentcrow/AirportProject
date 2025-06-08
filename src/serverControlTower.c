@@ -52,6 +52,7 @@ void gestioneAerei(void *argv){
     //first contact with a plane
     pthread_mutex_lock(&planeslist.mutex);
     planeslist.planes[planeslist.count++] = info;
+    //printf("CHECK === sockfd %d, planecode %s, timestamp %d, latitude %f, longitude %f, altitude %d, arrival %s, departure %s\n", info->sockfd, info->planeCode, info->timestamp, info->latitude, info->longitude, info->altitude, info->arrival, info->departure);
     pthread_mutex_unlock(&planeslist.mutex);
 
     while(true){
@@ -88,14 +89,20 @@ void gestioneAerei(void *argv){
             //since MSG_DATA should be the first packet to arrive it should work
             //the plane with the first data packet should also be the latter one in list
             //otherwise, i need to figure out a better way to identify it
+            
             pthread_mutex_lock(&planeslist.mutex);
-            strcpy(planeslist.planes[planeslist.count-1]->planeCode, packPlaneInfo.flightcode);
-            planeslist.planes[planeslist.count-1]->latitude = packPlaneInfo.latitude;
-            planeslist.planes[planeslist.count-1]->longitude = packPlaneInfo.longitude;
-            planeslist.planes[planeslist.count-1]->altitude = packPlaneInfo.altitude;
-            planeslist.planes[planeslist.count-1]->timestamp = packPlaneInfo.timestamp;
-            strcpy(planeslist.planes[planeslist.count-1]->departure, packPlaneInfo.departure);
-            strcpy(planeslist.planes[planeslist.count-1]->arrival, packPlaneInfo.arrival);
+            for(int i = 0; i<planeslist.count;i++){
+                //maybe if I identify the plane by its socket...?
+                if(planeslist.planes[i]->sockfd == plane_socket){
+                    strcpy(planeslist.planes[i]->planeCode, packPlaneInfo.flightcode);
+                    planeslist.planes[i]->latitude = packPlaneInfo.latitude;
+                    planeslist.planes[i]->longitude = packPlaneInfo.longitude;
+                    planeslist.planes[i]->altitude = packPlaneInfo.altitude;
+                    planeslist.planes[i]->timestamp = packPlaneInfo.timestamp;
+                    strcpy(planeslist.planes[i]->departure, packPlaneInfo.departure);
+                    strcpy(planeslist.planes[i]->arrival, packPlaneInfo.arrival);
+                }
+            }
             pthread_mutex_unlock(&planeslist.mutex);   
 
         }else if(pack.type == MSG_ALERT){
@@ -140,17 +147,17 @@ void checkDistances(){
                 .longitude = planeslist.planes[i]->longitude
             };
             for(int j =i+1; j<tot; j++){
-                
+                double distanc= 0.0;
                 Coordinates plane2 = {
                 .latitude = planeslist.planes[j]->latitude,
                 .longitude = planeslist.planes[j]->longitude
                 };
 
-                //if two are very close to each other
-                //printf("plane1: [%s] - %f %f -- plane2: [%s] - %f %f\n", planeslist.planes[i]->planeCode, planeslist.planes[i]->latitude, planeslist.planes[i]->longitude, planeslist.planes[j]->planeCode, planeslist.planes[j]->latitude, planeslist.planes[j]->longitude);
-                if((calcdistance((double)plane1.latitude, (double)plane1.longitude, (double)plane2.latitude, (double)plane2.longitude)) < 5.0){
+                //if two are very close to each other -- something wrong with the planes distances
+                //it gets triggered too often
+                if((distanc = calcdistance((double)plane1.latitude, (double)plane1.longitude, (double)plane2.latitude, (double)plane2.longitude)) < 5.0){
                     //then alert them!
-                    printf("ALERT!! %s and %s TOO CLOSE\n", planeslist.planes[i]->planeCode, planeslist.planes[j]->planeCode);
+                    printf("ALERT!! %s and %s TOO CLOSE. DISTANCE: %f\n", planeslist.planes[i]->planeCode, planeslist.planes[j]->planeCode, distanc);
                     Package p;
                     AlertData tooClosePack;
                     strcpy(tooClosePack.flightcode, "CTOWER");
