@@ -46,6 +46,7 @@ This file contains the code of the server. It has a tracked_plane structure whic
 ### tempWorkBench
 This is a temporary workbench to test functionalities and sizes without breaking everything in the other files.
 
+![Example of behaviour](./media/behaviour.jpg)
 ## The Plan
 Aka "The Roadmap", more or less
 * A thread checks positions of planes
