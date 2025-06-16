@@ -205,8 +205,6 @@ int create_server(uint16_t port){
 }
 
 int main(int argc, char * argv[]){
-    
-
     if((argc!=3) || (atoi(argv[1])<1024) || (strlen(argv[2]) !=4)){
         printf("Usage: %s <PORT> <AIRPORT CODE (4 CHAR)>\n", argv[0]);
         if(atoi(argv[1])<1024){
