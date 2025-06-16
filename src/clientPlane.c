@@ -172,7 +172,7 @@ int main(int argc, char * argv[]){
     
 
     pthread_t threadPosition, threadSend, threadReceive;
-    pthread_mutex_init(&airplaneStatus, NULL);
+    pthread_mutex_init(&airplaneStatus.mutex, NULL);
     pthread_create(&threadPosition, NULL, (void*)threadChangePosition, NULL);
     pthread_create(&threadSend, NULL, (void*)threadInvio, NULL);
     pthread_create(&threadReceive, NULL, (void*)threadRicezione, NULL);
